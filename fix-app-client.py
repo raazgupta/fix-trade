@@ -47,6 +47,33 @@ def create_login_request(sender_comp_id, target_comp_id, send_seq_num):
         content=login_request,
     )
 
+def create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num):
+    message_list = []
+
+    message_list.append(("35", "0")) # MsgType
+    message_list.append(("34", str(current_seq_num))) # MsgSeqNum
+    message_list.append(("49", sender_comp_id))  # SenderCompID
+    message_list.append(("52", getSendingTime()))  # SendingTime
+    message_list.append(("56", target_comp_id))  # TargetCompID
+
+    message = b''
+    for message_tag in message_list:
+        message = message + bytes(message_tag[0] + "=" + message_tag[1], encoding="utf-8") + b'\x01'
+
+    body_length = len(message) # 9 - BodyLength
+
+    message = bytes("8=FIX.4.2", encoding="utf-8") + b'\x01' + bytes("9="+str(body_length), encoding="utf-8") + b'\x01' + message
+
+    check_sum_str = getCheckSum(message)
+
+    message = message + bytes("10="+check_sum_str, encoding="utf-8") + b'\x01'
+
+    return dict(
+        type="binary/fix",
+        encoding="binary",
+        content=message,
+    )
+
 def getSendingTime():
     return datetime.utcnow().strftime('%Y%m%d-%H:%M:%S.%f')[:-3]
 
@@ -68,6 +95,13 @@ def start_connection(host, port):
     # sel.register(sock, events, data=message)
     return (sock, events)
 
+def start_sending_heartbeats(current_seq_num):
+    # threading.Timer(30.0, start_sending_heartbeats, [sock, current_seq_num]).start()
+    heartbeat = create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num)
+    heartbeat_message = fixlibclient.Message(sel, sock, addr, heartbeat)
+    sel.modify(sock, events, data=heartbeat_message)
+    #sock.send(heartbeat)
+    current_seq_num += 1
 
 if len(sys.argv) != 7:
     print("usage:", sys.argv[0], "<host> <port> <sender_comp_id> <target_comp_id> <send_seq_num> <receive_seq_num>")
@@ -80,13 +114,16 @@ send_seq_num = sys.argv[5]
 receive_seq_num = sys.argv[6]
 request = create_login_request(sender_comp_id, target_comp_id, send_seq_num)
 (sock, events) = start_connection(host, port)
+addr = (host, port)
+current_seq_num = int(send_seq_num)
 
 # Send login request
-addr = (host, port)
 message = fixlibclient.Message(sel, sock, addr, request)
 sel.register(sock, events, data=message)
+current_seq_num += 1
 
-
+# Start sending Heartbeats
+start_sending_heartbeats(current_seq_num)
 
 try:
     while True:
