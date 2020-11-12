@@ -1,13 +1,12 @@
 #!/usr/bin/env phython3
 
 import sys
-import socket
-import selectors
-import traceback
-from datetime import datetime
-import threading
 
-import fixlibclient
+import selectors
+from datetime import datetime
+# import threading
+
+import FixSocketHandler
 
 sel = selectors.DefaultSelector()
 
@@ -26,7 +25,6 @@ def create_login_request(sender_comp_id, target_comp_id, send_seq_num):
     login_list.append(("108", "30"))  # HeartBeatInt
     login_list.append(("141", "N"))  # ResetSeqNumFlag
 
-
     login_request = b''
     for login_tag in login_list:
         login_request = login_request + bytes(login_tag[0] + "=" + login_tag[1], encoding="utf-8") + b'\x01'
@@ -41,17 +39,13 @@ def create_login_request(sender_comp_id, target_comp_id, send_seq_num):
 
     # login_request = bytes("8=FIX.4.2", encoding="utf-8") + b'\x01' + bytes('9=90', encoding="utf-8")
 
-    return dict(
-        type="binary/fix",
-        encoding="binary",
-        content=login_request,
-    )
+    return login_request
 
 def create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num):
     message_list = []
 
-    message_list.append(("35", "0")) # MsgType
-    message_list.append(("34", str(current_seq_num))) # MsgSeqNum
+    message_list.append(("35", "0"))  # MsgType
+    message_list.append(("34", str(current_seq_num)))  # MsgSeqNum
     message_list.append(("49", sender_comp_id))  # SenderCompID
     message_list.append(("52", getSendingTime()))  # SendingTime
     message_list.append(("56", target_comp_id))  # TargetCompID
@@ -68,11 +62,7 @@ def create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num):
 
     message = message + bytes("10="+check_sum_str, encoding="utf-8") + b'\x01'
 
-    return dict(
-        type="binary/fix",
-        encoding="binary",
-        content=message,
-    )
+    return message
 
 def getSendingTime():
     return datetime.utcnow().strftime('%Y%m%d-%H:%M:%S.%f')[:-3]
@@ -84,17 +74,7 @@ def getCheckSum(fixMessage):
     checkSumStr = str(checkSum % 256)
     return checkSumStr.zfill(3)
 
-def start_connection(host, port):
-    addr = (host, port)
-    print("starting connection to", addr)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setblocking(False)
-    sock.connect_ex(addr)
-    events = selectors.EVENT_READ | selectors.EVENT_WRITE
-    # message = fixlibclient.Message(sel, sock, addr, request)
-    # sel.register(sock, events, data=message)
-    return (sock, events)
-
+"""
 def start_sending_heartbeats(current_seq_num):
     # threading.Timer(30.0, start_sending_heartbeats, [sock, current_seq_num]).start()
     heartbeat = create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num)
@@ -102,6 +82,7 @@ def start_sending_heartbeats(current_seq_num):
     sel.modify(sock, events, data=heartbeat_message)
     #sock.send(heartbeat)
     current_seq_num += 1
+"""
 
 if len(sys.argv) != 7:
     print("usage:", sys.argv[0], "<host> <port> <sender_comp_id> <target_comp_id> <send_seq_num> <receive_seq_num>")
@@ -112,36 +93,26 @@ sender_comp_id = sys.argv[3]
 target_comp_id = sys.argv[4]
 send_seq_num = sys.argv[5]
 receive_seq_num = sys.argv[6]
-request = create_login_request(sender_comp_id, target_comp_id, send_seq_num)
-(sock, events) = start_connection(host, port)
-addr = (host, port)
-current_seq_num = int(send_seq_num)
 
-# Send login request
-message = fixlibclient.Message(sel, sock, addr, request)
-sel.register(sock, events, data=message)
-current_seq_num += 1
+# Open Connection to FIX Server
+
+fix_client_sock = FixSocketHandler.FixSocketHandler()
+fix_client_sock.connect(host, port)
+
+# Login to FIX Server
+request = create_login_request(sender_comp_id, target_comp_id, send_seq_num)
+fix_client_sock.send(request)
+
+# current_seq_num = int(send_seq_num)
+# current_seq_num += 1
 
 # Start sending Heartbeats
-start_sending_heartbeats(current_seq_num)
+# start_sending_heartbeats(current_seq_num)
 
 try:
     while True:
-        events = sel.select(timeout=1)
-        for key, mask in events:
-            message = key.data
-            try:
-                message.process_events(mask)
-            except Exception:
-                print(
-                    "main: error: exception for",
-                    f"{message.addr}:\n{traceback.format_exc()}",
-                )
-                message.close()
-        # Check for a socket being monitored to continue
-        if not sel.get_map():
-            break
+        input("new / amend / cancel / receive : ")
 except KeyboardInterrupt:
     print("caught keyboard interrupt, exiting")
 finally:
-    sel.close()
+    fix_client_sock.close()

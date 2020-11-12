@@ -10,17 +10,20 @@ class FixSocketHandler:
     _begin_string_length: int
     _check_sum_length: int
 
-    def __init__(self, sock=None):
-        if sock is None:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        else:
-            self.sock = sock
+    def __init__(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._begin_string_length = 10
         self._check_sum_length = 7
 
     def connect(self, host, port):
+        print("starting connection to", (host, port))
         self.sock.connect((host, port))
         self.sock.setblocking(False)
+
+    def close(self):
+        print("Closing connection")
+        self.sock.shutdown(socket.SHUT_RDWR)
+        self.sock.close()
 
     def send(self, message):
 
