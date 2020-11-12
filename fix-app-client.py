@@ -74,6 +74,10 @@ def getCheckSum(fixMessage):
     checkSumStr = str(checkSum % 256)
     return checkSumStr.zfill(3)
 
+def prettyPrintFix(fix_bytes):
+    fix_bytes = fix_bytes.replace(b'\x01', b'^')
+    return(str(fix_bytes))
+
 """
 def start_sending_heartbeats(current_seq_num):
     # threading.Timer(30.0, start_sending_heartbeats, [sock, current_seq_num]).start()
@@ -101,6 +105,7 @@ fix_client_sock.connect(host, port)
 
 # Login to FIX Server
 request = create_login_request(sender_comp_id, target_comp_id, send_seq_num)
+print("Sending Login Request:" + prettyPrintFix(request))
 fix_client_sock.send(request)
 
 # current_seq_num = int(send_seq_num)
@@ -111,7 +116,15 @@ fix_client_sock.send(request)
 
 try:
     while True:
-        input("new / amend / cancel / receive : ")
+        input_text = input("new / amend / cancel / receive : ")
+        if input_text == "receive":
+            received_messages = fix_client_sock.receive()
+            if not received_messages:
+                print("No received messages")
+            else:
+                for message in received_messages:
+                    print(prettyPrintFix(message))
+
 except KeyboardInterrupt:
     print("caught keyboard interrupt, exiting")
 finally:

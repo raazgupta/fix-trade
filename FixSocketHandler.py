@@ -27,11 +27,8 @@ class FixSocketHandler:
 
     def send(self, message):
 
-        # Wait until the socket is ready to send data
-        write_sockets = []
-        exception_sockets = []
-        while len(write_sockets) == 0 and len(exception_sockets) == 0:
-            _, write_sockets, exception_sockets = select.select([], [self.sock], [self.sock])
+        # Is the socket ready to send data?
+        _, write_sockets, exception_sockets = select.select([], [self.sock], [self.sock], 0)
 
         if self.sock in exception_sockets:
             # Check if socket in error state
@@ -50,6 +47,7 @@ class FixSocketHandler:
                 total_sent += sent
             return True
         else:
+            print("Unable to send data")
             return False
 
     def receive(self):
@@ -59,8 +57,8 @@ class FixSocketHandler:
         # Check if the socket has any data to read
         while True:
 
-            try:
-                read_sockets, _, exception_sockets = select.select([self.sock], [], [self.sock])
+            #try:
+                read_sockets, _, exception_sockets = select.select([self.sock], [], [self.sock], 0)
 
                 if self.sock in exception_sockets:
                     # Check if socket in error state
@@ -99,6 +97,6 @@ class FixSocketHandler:
 
                     received_messages.append(b''.join(chunks))
 
-            except Exception as e:
-                print('Reading error: '.format(str(e)))
-                sys.exit()
+            #except Exception as e:
+            #    print('Reading error: '.format(str(e)))
+            #    sys.exit()
