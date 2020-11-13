@@ -9,16 +9,27 @@ class FixSocketHandler:
     sock: socket.socket
     _begin_string_length: int
     _check_sum_length: int
+    _max_potential_message: int
 
-    def __init__(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def __init__(self, sock=None):
+        if sock is None:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        else:
+            self.sock = sock
         self._begin_string_length = 10
         self._check_sum_length = 7
+        self._max_potential_message = 2048
 
     def connect(self, host, port):
         print("starting connection to", (host, port))
         self.sock.connect((host, port))
         self.sock.setblocking(False)
+
+    def listen(self, host, port):
+        self.sock.bind((host, port))
+        self.sock.listen()
+        print(f'Listening for connection on {host}:{port}...')
 
     def close(self):
         print("Closing connection")
@@ -57,7 +68,7 @@ class FixSocketHandler:
         # Check if the socket has any data to read
         while True:
 
-            #try:
+            try:
                 read_sockets, _, exception_sockets = select.select([self.sock], [], [self.sock], 0)
 
                 if self.sock in exception_sockets:
@@ -73,7 +84,7 @@ class FixSocketHandler:
                     if begin_string_bytes == b'':
                         return received_messages
                     begin_string = begin_string_bytes[:self._begin_string_length - 1].decode("utf-8")
-                    if begin_string != "FIX 4.2":
+                    if begin_string != "8=FIX.4.2":
                         print("Not FIX 4.2 message")
                         return received_messages
                     chunks.append(begin_string_bytes)
@@ -81,9 +92,8 @@ class FixSocketHandler:
                     # If it is a FIX message determine the length of the message
                     body_length_bytes = b''
                     received_byte = b''
-                    max_potential_message = 2048
                     current_byte_count = 0
-                    while received_byte != b'\x01' and current_byte_count <= max_potential_message:
+                    while received_byte != b'\x01' and current_byte_count <= self._max_potential_message:
                         received_byte = self.sock.recv(1)
                         current_byte_count += 1
                         body_length_bytes += received_byte
@@ -97,6 +107,6 @@ class FixSocketHandler:
 
                     received_messages.append(b''.join(chunks))
 
-            #except Exception as e:
-            #    print('Reading error: '.format(str(e)))
-            #    sys.exit()
+            except Exception as e:
+                print('Reading error: '.format(str(e)))
+                sys.exit()

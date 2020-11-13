@@ -1,14 +1,10 @@
-#!/usr/bin/env phython3
+#!/usr/bin/env python3
 
 import sys
-
-import selectors
 from datetime import datetime
 # import threading
 
 import FixSocketHandler
-
-sel = selectors.DefaultSelector()
 
 
 def create_login_request(sender_comp_id, target_comp_id, send_seq_num):
@@ -19,7 +15,6 @@ def create_login_request(sender_comp_id, target_comp_id, send_seq_num):
     login_list.append(("34", send_seq_num))  # MsgSeqNum
     login_list.append(("49", sender_comp_id))  # SenderCompID
     login_list.append(("52", getSendingTime()))  # SendingTime
-    # login_list.append(("52", "20201105-22:45:07.767"))  # SendingTime
     login_list.append(("56", target_comp_id))  # TargetCompID
     login_list.append(("98", "0"))  # EncryptMethod
     login_list.append(("108", "30"))  # HeartBeatInt
@@ -36,8 +31,6 @@ def create_login_request(sender_comp_id, target_comp_id, send_seq_num):
     checkSumStr = getCheckSum(login_request)
 
     login_request = login_request + bytes("10="+checkSumStr, encoding="utf-8") + b'\x01'
-
-    # login_request = bytes("8=FIX.4.2", encoding="utf-8") + b'\x01' + bytes('9=90', encoding="utf-8")
 
     return login_request
 
