@@ -2,7 +2,7 @@
 
 import sys
 from datetime import datetime
-# import threading
+import threading
 
 import FixSocketHandler
 
@@ -71,15 +71,34 @@ def prettyPrintFix(fix_bytes):
     fix_bytes = fix_bytes.replace(b'\x01', b'^')
     return(str(fix_bytes))
 
-"""
+def parse_fix_bytes(fix_bytes):
+    fix_dict = {}
+    chunks = b''
+
+    byte_list = [fix_bytes[i:i+1] for i in range(len(fix_bytes))]
+    for chunk in byte_list:
+        if chunk == b'\x01':
+            # Delimiter signifying chunks has complete tag
+            tag_value_string = chunks.decode("utf-8")
+            tag_value_list = tag_value_string.split("=")
+            fix_dict[tag_value_list[0]] = tag_value_list[1]
+            chunks = b''
+        else:
+            chunks += chunk
+
+    return fix_dict
+
+
 def start_sending_heartbeats(current_seq_num):
-    # threading.Timer(30.0, start_sending_heartbeats, [sock, current_seq_num]).start()
+
+    heartbeat_thread = threading.Timer(15.0, start_sending_heartbeats, [current_seq_num])
+    heartbeat_thread.daemon = True
+    heartbeat_thread.start()
+
     heartbeat = create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num)
-    heartbeat_message = fixlibclient.Message(sel, sock, addr, heartbeat)
-    sel.modify(sock, events, data=heartbeat_message)
-    #sock.send(heartbeat)
+    fix_client_sock.send(heartbeat)
     current_seq_num += 1
-"""
+
 
 if len(sys.argv) != 7:
     print("usage:", sys.argv[0], "<host> <port> <sender_comp_id> <target_comp_id> <send_seq_num> <receive_seq_num>")
@@ -98,14 +117,15 @@ fix_client_sock.connect(host, port)
 
 # Login to FIX Server
 request = create_login_request(sender_comp_id, target_comp_id, send_seq_num)
-print("Sending Login Request:" + prettyPrintFix(request))
+print("Sending Login Request:" + str(parse_fix_bytes(request)))
 fix_client_sock.send(request)
 
-# current_seq_num = int(send_seq_num)
-# current_seq_num += 1
+current_seq_num = int(send_seq_num)
+current_seq_num += 1
 
 # Start sending Heartbeats
-# start_sending_heartbeats(current_seq_num)
+start_sending_heartbeats(current_seq_num)
+
 
 try:
     while True:
@@ -116,7 +136,7 @@ try:
                 print("No received messages")
             else:
                 for message in received_messages:
-                    print(prettyPrintFix(message))
+                    print(str(parse_fix_bytes(message)))
 
 except KeyboardInterrupt:
     print("caught keyboard interrupt, exiting")

@@ -127,9 +127,10 @@ try:
                 fix_client_sock = FixSocketHandler.FixSocketHandler(notified_socket)
                 received_messages = fix_client_sock.receive()
 
-                if received_messages:
-                    # Check if first message is login request
-                    fix_dict = parse_fix_bytes(received_messages[0])
+                for received_message in received_messages:
+
+                    fix_dict = parse_fix_bytes(received_message)
+
                     if fix_dict["35"] == "A":
                         # Found a login request, send a login response
                         print("Received Login Request")
