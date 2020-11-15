@@ -6,139 +6,148 @@ import threading
 
 import FixSocketHandler
 
+class FixAppClient:
 
-def create_login_request(sender_comp_id, target_comp_id, send_seq_num):
+    def __init__(self, fix_client_sock, sender_comp_id, target_comp_id, send_seq_num, receive_seq_num):
+        self.fix_client_sock = fix_client_sock
+        self.sender_comp_id = sender_comp_id
+        self.target_comp_id = target_comp_id
+        self.send_seq_num = send_seq_num
+        self.receive_seq_num = receive_seq_num
+        self.current_seq_num = int(send_seq_num)
 
-    login_list = []
+    def create_login_request(self):
 
-    login_list.append(("35", "A"))  # MsgType
-    login_list.append(("34", send_seq_num))  # MsgSeqNum
-    login_list.append(("49", sender_comp_id))  # SenderCompID
-    login_list.append(("52", getSendingTime()))  # SendingTime
-    login_list.append(("56", target_comp_id))  # TargetCompID
-    login_list.append(("98", "0"))  # EncryptMethod
-    login_list.append(("108", "30"))  # HeartBeatInt
-    login_list.append(("141", "N"))  # ResetSeqNumFlag
+        login_list = []
 
-    login_request = b''
-    for login_tag in login_list:
-        login_request = login_request + bytes(login_tag[0] + "=" + login_tag[1], encoding="utf-8") + b'\x01'
+        login_list.append(("35", "A"))  # MsgType
+        login_list.append(("34", self.send_seq_num))  # MsgSeqNum
+        login_list.append(("49", self.sender_comp_id))  # SenderCompID
+        login_list.append(("52", self.getSendingTime()))  # SendingTime
+        login_list.append(("56", self.target_comp_id))  # TargetCompID
+        login_list.append(("98", "0"))  # EncryptMethod
+        login_list.append(("108", "30"))  # HeartBeatInt
+        login_list.append(("141", "N"))  # ResetSeqNumFlag
 
-    bodyLength = len(login_request)  # 9 - BodyLength
+        login_request = b''
+        for login_tag in login_list:
+            login_request = login_request + bytes(login_tag[0] + "=" + login_tag[1], encoding="utf-8") + b'\x01'
 
-    login_request = bytes("8=FIX.4.2", encoding="utf-8") + b'\x01' + bytes("9="+str(bodyLength), encoding="utf-8") + b'\x01' + login_request
+        bodyLength = len(login_request)  # 9 - BodyLength
 
-    checkSumStr = getCheckSum(login_request)
+        login_request = bytes("8=FIX.4.2", encoding="utf-8") + b'\x01' + bytes("9="+str(bodyLength), encoding="utf-8") + b'\x01' + login_request
 
-    login_request = login_request + bytes("10="+checkSumStr, encoding="utf-8") + b'\x01'
+        checkSumStr = self.getCheckSum(login_request)
 
-    return login_request
+        login_request = login_request + bytes("10="+checkSumStr, encoding="utf-8") + b'\x01'
 
-def create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num):
-    message_list = []
+        self.current_seq_num += 1
 
-    message_list.append(("35", "0"))  # MsgType
-    message_list.append(("34", str(current_seq_num)))  # MsgSeqNum
-    message_list.append(("49", sender_comp_id))  # SenderCompID
-    message_list.append(("52", getSendingTime()))  # SendingTime
-    message_list.append(("56", target_comp_id))  # TargetCompID
+        return login_request
 
-    message = b''
-    for message_tag in message_list:
-        message = message + bytes(message_tag[0] + "=" + message_tag[1], encoding="utf-8") + b'\x01'
+    def create_heartbeat_message(self):
+        message_list = []
 
-    body_length = len(message) # 9 - BodyLength
+        message_list.append(("35", "0"))  # MsgType
+        message_list.append(("34", str(self.current_seq_num)))  # MsgSeqNum
+        message_list.append(("49", self.sender_comp_id))  # SenderCompID
+        message_list.append(("52", self.getSendingTime()))  # SendingTime
+        message_list.append(("56", self.target_comp_id))  # TargetCompID
 
-    message = bytes("8=FIX.4.2", encoding="utf-8") + b'\x01' + bytes("9="+str(body_length), encoding="utf-8") + b'\x01' + message
+        message = b''
+        for message_tag in message_list:
+            message = message + bytes(message_tag[0] + "=" + message_tag[1], encoding="utf-8") + b'\x01'
 
-    check_sum_str = getCheckSum(message)
+        body_length = len(message) # 9 - BodyLength
 
-    message = message + bytes("10="+check_sum_str, encoding="utf-8") + b'\x01'
+        message = bytes("8=FIX.4.2", encoding="utf-8") + b'\x01' + bytes("9="+str(body_length), encoding="utf-8") + b'\x01' + message
 
-    return message
+        check_sum_str = self.getCheckSum(message)
 
-def getSendingTime():
-    return datetime.utcnow().strftime('%Y%m%d-%H:%M:%S.%f')[:-3]
+        message = message + bytes("10="+check_sum_str, encoding="utf-8") + b'\x01'
 
-def getCheckSum(fixMessage):
-    checkSum = 0
-    for byte in fixMessage:
-        checkSum = checkSum + int(byte)
-    checkSumStr = str(checkSum % 256)
-    return checkSumStr.zfill(3)
+        self.current_seq_num += 1
 
-def prettyPrintFix(fix_bytes):
-    fix_bytes = fix_bytes.replace(b'\x01', b'^')
-    return(str(fix_bytes))
+        return message
 
-def parse_fix_bytes(fix_bytes):
-    fix_dict = {}
-    chunks = b''
+    def getSendingTime(self):
+        return datetime.utcnow().strftime('%Y%m%d-%H:%M:%S.%f')[:-3]
 
-    byte_list = [fix_bytes[i:i+1] for i in range(len(fix_bytes))]
-    for chunk in byte_list:
-        if chunk == b'\x01':
-            # Delimiter signifying chunks has complete tag
-            tag_value_string = chunks.decode("utf-8")
-            tag_value_list = tag_value_string.split("=")
-            fix_dict[tag_value_list[0]] = tag_value_list[1]
-            chunks = b''
-        else:
-            chunks += chunk
+    def getCheckSum(self, fixMessage):
+        checkSum = 0
+        for byte in fixMessage:
+            checkSum = checkSum + int(byte)
+        checkSumStr = str(checkSum % 256)
+        return checkSumStr.zfill(3)
 
-    return fix_dict
+    def prettyPrintFix(self, fix_bytes):
+        fix_bytes = fix_bytes.replace(b'\x01', b'^')
+        return(str(fix_bytes))
 
+    def parse_fix_bytes(self, fix_bytes):
+        fix_dict = {}
+        chunks = b''
 
-def start_sending_heartbeats(current_seq_num):
-
-    heartbeat_thread = threading.Timer(30.0, start_sending_heartbeats, [current_seq_num])
-    heartbeat_thread.daemon = True
-    heartbeat_thread.start()
-
-    heartbeat = create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num)
-    fix_client_sock.send(heartbeat)
-    current_seq_num += 1
-
-
-if len(sys.argv) != 7:
-    print("usage:", sys.argv[0], "<host> <port> <sender_comp_id> <target_comp_id> <send_seq_num> <receive_seq_num>")
-    sys.exit(1)
-
-host, port = sys.argv[1], int(sys.argv[2])
-sender_comp_id = sys.argv[3]
-target_comp_id = sys.argv[4]
-send_seq_num = sys.argv[5]
-receive_seq_num = sys.argv[6]
-
-# Open Connection to FIX Server
-
-fix_client_sock = FixSocketHandler.FixSocketHandler()
-fix_client_sock.connect(host, port)
-
-# Login to FIX Server
-request = create_login_request(sender_comp_id, target_comp_id, send_seq_num)
-print("Sending Login Request:" + str(parse_fix_bytes(request)))
-fix_client_sock.send(request)
-
-current_seq_num = int(send_seq_num)
-current_seq_num += 1
-
-# Start sending Heartbeats
-start_sending_heartbeats(current_seq_num)
-
-
-try:
-    while True:
-        input_text = input("new / amend / cancel / receive : ")
-        if input_text == "receive":
-            received_messages = fix_client_sock.receive()
-            if not received_messages:
-                print("No received messages")
+        byte_list = [fix_bytes[i:i+1] for i in range(len(fix_bytes))]
+        for chunk in byte_list:
+            if chunk == b'\x01':
+                # Delimiter signifying chunks has complete tag
+                tag_value_string = chunks.decode("utf-8")
+                tag_value_list = tag_value_string.split("=")
+                fix_dict[tag_value_list[0]] = tag_value_list[1]
+                chunks = b''
             else:
-                for message in received_messages:
-                    print(str(parse_fix_bytes(message)))
+                chunks += chunk
 
-except KeyboardInterrupt:
-    print("caught keyboard interrupt, exiting")
-finally:
-    fix_client_sock.close()
+        return fix_dict
+
+    def start_sending_heartbeats(self):
+
+        heartbeat_thread = threading.Timer(30.0, self.start_sending_heartbeats, [])
+        heartbeat_thread.daemon = True
+        heartbeat_thread.start()
+
+        heartbeat = self.create_heartbeat_message()
+        self.fix_client_sock.send(heartbeat)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 7:
+        print("usage:", sys.argv[0], "<host> <port> <sender_comp_id> <target_comp_id> <send_seq_num> <receive_seq_num>")
+        sys.exit(1)
+
+    host, port = sys.argv[1], int(sys.argv[2])
+    sender_comp_id = sys.argv[3]
+    target_comp_id = sys.argv[4]
+    send_seq_num = sys.argv[5]
+    receive_seq_num = sys.argv[6]
+
+    # Open Connection to FIX Server
+
+    fix_client_sock = FixSocketHandler.FixSocketHandler()
+    fix_client_sock.connect(host, port)
+
+    # Login to FIX Server
+    fix_app_client = FixAppClient(fix_client_sock, sender_comp_id, target_comp_id, send_seq_num, receive_seq_num)
+    request = fix_app_client.create_login_request()
+    print("Sending Login Request:" + str(fix_app_client.parse_fix_bytes(request)))
+    fix_client_sock.send(request)
+
+    # Start sending Heartbeats
+    fix_app_client.start_sending_heartbeats()
+
+    try:
+        while True:
+            input_text = input("new / amend / cancel / receive : ")
+            if input_text == "receive":
+                received_messages = fix_client_sock.receive()
+                if not received_messages:
+                    print("No received messages")
+                else:
+                    for message in received_messages:
+                        print(str(fix_app_client.parse_fix_bytes(message)))
+
+    except KeyboardInterrupt:
+        print("caught keyboard interrupt, exiting")
+    finally:
+        fix_client_sock.close()
