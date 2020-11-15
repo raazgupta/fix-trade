@@ -3,6 +3,7 @@
 import sys
 from datetime import datetime
 import select
+import threading
 
 import FixSocketHandler
 
@@ -86,15 +87,18 @@ def parse_fix_bytes(fix_bytes):
 
     return fix_dict
 
-"""
-def start_sending_heartbeats(current_seq_num):
-    # threading.Timer(30.0, start_sending_heartbeats, [sock, current_seq_num]).start()
+
+def start_sending_heartbeats(heartbeat_sock, sender_comp_id, target_comp_id, current_seq_num):
+
+    heartbeat_thread = threading.Timer(30.0, start_sending_heartbeats, [heartbeat_sock, sender_comp_id, target_comp_id, current_seq_num])
+    heartbeat_thread.daemon = True
+    heartbeat_thread.start()
+
     heartbeat = create_heartbeat_message(sender_comp_id, target_comp_id, current_seq_num)
-    heartbeat_message = fixlibclient.Message(sel, sock, addr, heartbeat)
-    sel.modify(sock, events, data=heartbeat_message)
-    #sock.send(heartbeat)
+    heartbeat_sock.send(heartbeat)
+    print(f"Sending Heartbeat to {heartbeat_sock.sock.getpeername()}: {parse_fix_bytes(heartbeat)} ")
     current_seq_num += 1
-"""
+
 
 if len(sys.argv) != 3:
     print("usage:", sys.argv[0], "<host> <port>")
@@ -123,7 +127,7 @@ try:
                 print(f"Accepting new connection from {client_address}")
                 socket_list.append(client_socket)
             else:
-                # Receive login request
+                # Receive messages from client
                 fix_client_sock = FixSocketHandler.FixSocketHandler(notified_socket)
                 received_messages = fix_client_sock.receive()
 
@@ -139,6 +143,9 @@ try:
                         login_response = create_login_response(sender_comp_id, target_comp_id, "1")
                         fix_client_sock.send(login_response)
                         print("Sent Login Response")
+                        # Start sending Heartbeats
+                        start_sending_heartbeats(fix_client_sock, sender_comp_id, target_comp_id, 1)
+
 
 except KeyboardInterrupt:
     print("caught keyboard interrupt, exiting")

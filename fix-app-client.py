@@ -91,7 +91,7 @@ def parse_fix_bytes(fix_bytes):
 
 def start_sending_heartbeats(current_seq_num):
 
-    heartbeat_thread = threading.Timer(15.0, start_sending_heartbeats, [current_seq_num])
+    heartbeat_thread = threading.Timer(30.0, start_sending_heartbeats, [current_seq_num])
     heartbeat_thread.daemon = True
     heartbeat_thread.start()
 
