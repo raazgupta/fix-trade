@@ -5,6 +5,7 @@ from datetime import datetime
 import threading
 
 import FixSocketHandler
+from FixParser import FixParser
 
 class FixAppClient:
 
@@ -80,27 +81,6 @@ class FixAppClient:
         checkSumStr = str(checkSum % 256)
         return checkSumStr.zfill(3)
 
-    def prettyPrintFix(self, fix_bytes):
-        fix_bytes = fix_bytes.replace(b'\x01', b'^')
-        return(str(fix_bytes))
-
-    def parse_fix_bytes(self, fix_bytes):
-        fix_dict = {}
-        chunks = b''
-
-        byte_list = [fix_bytes[i:i+1] for i in range(len(fix_bytes))]
-        for chunk in byte_list:
-            if chunk == b'\x01':
-                # Delimiter signifying chunks has complete tag
-                tag_value_string = chunks.decode("utf-8")
-                tag_value_list = tag_value_string.split("=")
-                fix_dict[tag_value_list[0]] = tag_value_list[1]
-                chunks = b''
-            else:
-                chunks += chunk
-
-        return fix_dict
-
     def start_sending_heartbeats(self):
 
         heartbeat_thread = threading.Timer(30.0, self.start_sending_heartbeats, [])
@@ -130,7 +110,7 @@ if __name__ == "__main__":
     # Login to FIX Server
     fix_app_client = FixAppClient(fix_client_sock, sender_comp_id, target_comp_id, send_seq_num, receive_seq_num)
     request = fix_app_client.create_login_request()
-    print("Sending Login Request:" + str(fix_app_client.parse_fix_bytes(request)))
+    print("Sending Login Request:" + str(FixParser.parse_fix_bytes(request)))
     fix_client_sock.send(request)
 
     # Start sending Heartbeats
@@ -145,7 +125,7 @@ if __name__ == "__main__":
                     print("No received messages")
                 else:
                     for message in received_messages:
-                        print(str(fix_app_client.parse_fix_bytes(message)))
+                        print(str(FixParser.parse_fix_bytes(message)))
 
     except KeyboardInterrupt:
         print("caught keyboard interrupt, exiting")

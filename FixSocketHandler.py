@@ -106,6 +106,7 @@ class FixSocketHandler:
                     chunks.append(body_bytes)
 
                     received_messages.append(b''.join(chunks))
+                    chunks = []
 
             except Exception as e:
                 print('Reading error: '.format(str(e)))
