@@ -4,17 +4,19 @@ import sys
 from datetime import datetime
 import threading
 
-import FixSocketHandler
+from FixSocketHandler import FixSocketHandler
 from FixParser import FixParser
+
 
 class FixAppClient:
 
-    def __init__(self, fix_client_sock, sender_comp_id, target_comp_id, send_seq_num, receive_seq_num):
-        self.fix_client_sock = fix_client_sock
+    def __init__(self, host, port, sender_comp_id, target_comp_id, send_seq_num):
+        self.fix_client_sock = FixSocketHandler()
+        self.host = host
+        self.port = port
         self.sender_comp_id = sender_comp_id
         self.target_comp_id = target_comp_id
         self.send_seq_num = send_seq_num
-        self.receive_seq_num = receive_seq_num
         self.current_seq_num = int(send_seq_num)
 
     def create_login_request(self):
@@ -90,44 +92,47 @@ class FixAppClient:
         heartbeat = self.create_heartbeat_message()
         self.fix_client_sock.send(heartbeat)
 
+    def start(self):
+
+        # Open Connection to FIX Server
+        self.fix_client_sock.connect(self.host, self.port)
+
+        # Send login request
+        request = self.create_login_request()
+        print("Sending Login Request:" + str(FixParser.parse_fix_bytes(request)))
+        self.fix_client_sock.send(request)
+
+        # Start sending Heartbeats
+        self.start_sending_heartbeats()
+
+        try:
+            while True:
+                input_text = input("new / amend / cancel / receive : ")
+                if input_text == "receive":
+                    received_messages = self.fix_client_sock.receive()
+                    if not received_messages:
+                        print("No received messages")
+                    else:
+                        for message in received_messages:
+                            print(str(FixParser.parse_fix_bytes(message)))
+
+        except KeyboardInterrupt:
+            print("caught keyboard interrupt, exiting")
+        finally:
+            self.fix_client_sock.close()
+
 
 if __name__ == "__main__":
-    if len(sys.argv) != 7:
-        print("usage:", sys.argv[0], "<host> <port> <sender_comp_id> <target_comp_id> <send_seq_num> <receive_seq_num>")
+    if len(sys.argv) != 6:
+        print("usage:", sys.argv[0], "<host> <port> <sender_comp_id> <target_comp_id> <send_seq_num>")
         sys.exit(1)
 
     host, port = sys.argv[1], int(sys.argv[2])
     sender_comp_id = sys.argv[3]
     target_comp_id = sys.argv[4]
     send_seq_num = sys.argv[5]
-    receive_seq_num = sys.argv[6]
 
-    # Open Connection to FIX Server
+    fix_app_client = FixAppClient(host, port, sender_comp_id, target_comp_id, send_seq_num)
 
-    fix_client_sock = FixSocketHandler.FixSocketHandler()
-    fix_client_sock.connect(host, port)
-
-    # Login to FIX Server
-    fix_app_client = FixAppClient(fix_client_sock, sender_comp_id, target_comp_id, send_seq_num, receive_seq_num)
-    request = fix_app_client.create_login_request()
-    print("Sending Login Request:" + str(FixParser.parse_fix_bytes(request)))
-    fix_client_sock.send(request)
-
-    # Start sending Heartbeats
-    fix_app_client.start_sending_heartbeats()
-
-    try:
-        while True:
-            input_text = input("new / amend / cancel / receive : ")
-            if input_text == "receive":
-                received_messages = fix_client_sock.receive()
-                if not received_messages:
-                    print("No received messages")
-                else:
-                    for message in received_messages:
-                        print(str(FixParser.parse_fix_bytes(message)))
-
-    except KeyboardInterrupt:
-        print("caught keyboard interrupt, exiting")
-    finally:
-        fix_client_sock.close()
+    # Start the FIX Client
+    fix_app_client.start()
